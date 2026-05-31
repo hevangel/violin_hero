@@ -10,6 +10,8 @@ from pathlib import Path
 from fastapi import UploadFile
 from PIL import Image
 
+from app.ocr_hints import build_omr_hints
+
 allowed_omr_extensions = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 raster_omr_extensions = {".png", ".jpg", ".jpeg", ".webp"}
 export_extensions = {".mxl", ".musicxml", ".xml"}
@@ -24,6 +26,7 @@ class OmrError(RuntimeError):
 class ConvertedScore:
     path: Path
     temp_dir: tempfile.TemporaryDirectory[str]
+    hints: dict[str, object]
 
     def cleanup(self) -> None:
         self.temp_dir.cleanup()
@@ -54,7 +57,8 @@ async def convert_upload_with_audiveris(upload: UploadFile) -> ConvertedScore:
         prepared_path = prepare_input_for_omr(input_path, suffix)
         run_audiveris(prepared_path, output_dir)
         exported = find_exported_score(output_dir)
-        return ConvertedScore(path=exported, temp_dir=temp_dir)
+        hints = collect_hints_safely(prepared_path, exported)
+        return ConvertedScore(path=exported, temp_dir=temp_dir, hints=hints)
     except Exception:
         temp_dir.cleanup()
         raise
@@ -118,6 +122,13 @@ def find_exported_score(output_dir: Path) -> Path:
 
     candidates.sort(key=lambda path: (path.suffix.lower() != ".mxl", -path.stat().st_size, path.name))
     return candidates[0]
+
+
+def collect_hints_safely(scan_path: Path, musicxml_path: Path) -> dict[str, object]:
+    try:
+        return build_omr_hints(scan_path, musicxml_path)
+    except Exception:
+        return {}
 
 
 def summarize_process_output(output: str, limit: int = 1800) -> str:

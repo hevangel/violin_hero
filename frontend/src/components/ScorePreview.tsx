@@ -1,18 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 import { midiToNoteName } from "../game/music";
+import { readMusicXmlFile } from "../score/musicxml";
+import { scoreNotesToMusicXmlPreview } from "../score/musicxmlExport";
 import type { ScoreNote } from "../score/types";
 
 type ScorePreviewProps = {
+  title?: string;
   sourceBlob?: Blob;
+  notes: ScoreNote[];
   currentNote: ScoreNote | null;
   currentNoteIndex: number | null;
 };
 
-export function ScorePreview({ sourceBlob, currentNote, currentNoteIndex }: ScorePreviewProps) {
+export function ScorePreview({ title = "Violin preview", sourceBlob, notes, currentNote, currentNoteIndex }: ScorePreviewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const osmdRef = useRef<OpenSheetMusicDisplay | null>(null);
   const cursorIndexRef = useRef<number | null>(null);
+  const generatedCursorStepsRef = useRef<Map<string, number> | null>(null);
   const [message, setMessage] = useState("");
   const [isRendered, setIsRendered] = useState(false);
 
@@ -26,6 +31,7 @@ export function ScorePreview({ sourceBlob, currentNote, currentNoteIndex }: Scor
     container.innerHTML = "";
     osmdRef.current = null;
     cursorIndexRef.current = null;
+    generatedCursorStepsRef.current = null;
     setIsRendered(false);
     if (!sourceBlob) {
       setMessage("");
@@ -33,29 +39,40 @@ export function ScorePreview({ sourceBlob, currentNote, currentNoteIndex }: Scor
     }
 
     setMessage("Rendering notation preview...");
-    const osmd = new OpenSheetMusicDisplay(container, {
-      autoResize: true,
-      backend: "svg",
-      drawTitle: false,
-      drawPartNames: false,
-      drawPartAbbreviations: false,
-      cursorsOptions: [{ type: 0, color: "#f72585", alpha: 0.55, follow: true }],
-    });
-
-    osmd
-      .load(sourceBlob)
-      .then(() => {
+    renderPreview(container, sourceBlob)
+      .then((osmd) => {
         if (!disposed) {
-          osmd.render();
           osmdRef.current = osmd;
           setIsRendered(true);
           setMessage("");
         }
       })
-      .catch(() => {
-        if (!disposed) {
-          setMessage("The game can use this score, but notation preview failed to render.");
+      .catch((error) => {
+        console.error("Notation preview failed to render from extracted MusicXML.", error);
+        if (disposed || notes.length === 0) {
+          if (!disposed) {
+            setMessage(`Notation preview failed to render: ${errorMessage(error)}`);
+          }
+          return;
         }
+
+        const fallbackPreview = scoreNotesToMusicXmlPreview(title, notes);
+        generatedCursorStepsRef.current = fallbackPreview.cursorStepsByNoteId;
+        container.innerHTML = "";
+        renderPreview(container, fallbackPreview.blob)
+          .then((osmd) => {
+            if (!disposed) {
+              osmdRef.current = osmd;
+              setIsRendered(true);
+              setMessage("Showing a simplified violin-only preview because the extracted notation could not render.");
+            }
+          })
+          .catch((fallbackError) => {
+            console.error("Fallback notation preview failed to render.", fallbackError);
+            if (!disposed) {
+              setMessage(`Notation preview failed to render: ${errorMessage(error)}`);
+            }
+          });
       });
 
     return () => {
@@ -64,7 +81,7 @@ export function ScorePreview({ sourceBlob, currentNote, currentNoteIndex }: Scor
       osmdRef.current = null;
       container.innerHTML = "";
     };
-  }, [sourceBlob]);
+  }, [notes, sourceBlob, title]);
 
   useEffect(() => {
     const osmd = osmdRef.current;
@@ -73,26 +90,27 @@ export function ScorePreview({ sourceBlob, currentNote, currentNoteIndex }: Scor
       return;
     }
 
-    if (currentNoteIndex === null) {
+    if (currentNoteIndex === null || !currentNote) {
       osmd.cursor?.hide();
       cursorIndexRef.current = null;
       return;
     }
 
+    const targetCursorStep = cursorStepForNote(currentNote, currentNoteIndex, generatedCursorStepsRef.current);
     try {
       osmd.cursor.reset();
       osmd.cursor.show();
-      for (let index = 0; index < currentNoteIndex; index += 1) {
+      for (let index = 0; index < targetCursorStep; index += 1) {
         osmd.cursor.next();
       }
       osmd.cursor.update();
-      scrollPreviewToCursor(container, osmd.cursor.cursorElement, currentNoteIndex);
-      cursorIndexRef.current = currentNoteIndex;
+      scrollPreviewToCursor(container, osmd.cursor.cursorElement, targetCursorStep);
+      cursorIndexRef.current = targetCursorStep;
     } catch {
-      scrollPreviewProportionally(container, currentNoteIndex);
+      scrollPreviewProportionally(container, targetCursorStep);
       cursorIndexRef.current = null;
     }
-  }, [currentNoteIndex, isRendered]);
+  }, [currentNote, currentNoteIndex, isRendered]);
 
   return (
     <section className="panel score-preview">
@@ -106,6 +124,34 @@ export function ScorePreview({ sourceBlob, currentNote, currentNoteIndex }: Scor
       <div ref={containerRef} className="notation-host" />
     </section>
   );
+}
+
+async function renderPreview(container: HTMLElement, sourceBlob: Blob): Promise<OpenSheetMusicDisplay> {
+  const { xmlText } = await readMusicXmlFile(sourceBlob);
+  const osmd = new OpenSheetMusicDisplay(container, {
+    autoResize: true,
+    backend: "svg",
+    drawTitle: false,
+    drawPartNames: false,
+    drawPartAbbreviations: false,
+    cursorsOptions: [{ type: 0, color: "#f72585", alpha: 0.55, follow: true }],
+  });
+
+  await osmd.load(xmlText);
+  osmd.render();
+  return osmd;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "unknown renderer error";
+}
+
+function cursorStepForNote(
+  note: ScoreNote,
+  fallbackNoteIndex: number,
+  generatedCursorStepsByNoteId: Map<string, number> | null,
+): number {
+  return generatedCursorStepsByNoteId?.get(note.id) ?? note.cursorStep ?? fallbackNoteIndex;
 }
 
 function scrollPreviewToCursor(container: HTMLElement, cursorElement: HTMLElement | null, currentNoteIndex: number) {

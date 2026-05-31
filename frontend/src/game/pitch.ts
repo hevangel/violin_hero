@@ -11,6 +11,7 @@ export type DetectedPitch = {
 export type PitchTracker = {
   start: (onPitch: (pitch: DetectedPitch | null) => void) => Promise<void>;
   stop: () => void;
+  getStream: () => MediaStream | null;
 };
 
 export function createPitchTracker(): PitchTracker {
@@ -73,6 +74,9 @@ export function createPitchTracker(): PitchTracker {
       source = null;
       stream = null;
       smoothedMidi = null;
+    },
+    getStream() {
+      return stream;
     },
   };
 }

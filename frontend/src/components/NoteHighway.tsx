@@ -7,13 +7,19 @@ type NoteHighwayProps = {
   notes: ScoreNote[];
   currentSec: number;
   activePitchMidi: number | null;
+  pitchTrail?: PitchTrailPoint[];
   lastJudgement?: Judgement;
+};
+
+type PitchTrailPoint = {
+  timeSec: number;
+  midi: number | null;
 };
 
 const lead_seconds = 4;
 const note_colors = ["#4cc9f0", "#4895ef", "#4361ee", "#7209b7", "#f72585", "#f77f00", "#fcbf49"];
 
-export function NoteHighway({ notes, currentSec, activePitchMidi, lastJudgement }: NoteHighwayProps) {
+export function NoteHighway({ notes, currentSec, activePitchMidi, pitchTrail = [], lastJudgement }: NoteHighwayProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -32,8 +38,8 @@ export function NoteHighway({ notes, currentSec, activePitchMidi, lastJudgement 
     }
 
     ctx.scale(scale, scale);
-    draw(ctx, rect.width, rect.height, notes, currentSec, activePitchMidi, lastJudgement);
-  }, [notes, currentSec, activePitchMidi, lastJudgement]);
+    draw(ctx, rect.width, rect.height, notes, currentSec, activePitchMidi, pitchTrail, lastJudgement);
+  }, [notes, currentSec, activePitchMidi, pitchTrail, lastJudgement]);
 
   return <canvas ref={canvasRef} className="note-highway" aria-label="Violin Hero note highway" />;
 }
@@ -45,6 +51,7 @@ function draw(
   notes: ScoreNote[],
   currentSec: number,
   activePitchMidi: number | null,
+  pitchTrail: PitchTrailPoint[],
   lastJudgement?: Judgement,
 ) {
   const paddingX = 36;
@@ -94,6 +101,27 @@ function draw(
     ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
     ctx.font = "700 11px Inter, system-ui, sans-serif";
     ctx.fillText(midiToNoteName(note.pitchMidi), x - 14, y - noteHeight - 6);
+  }
+
+  for (const sample of pitchTrail) {
+    if (sample.midi === null) {
+      continue;
+    }
+
+    const timeUntilHit = sample.timeSec - currentSec;
+    if (timeUntilHit < -1.2 || timeUntilHit > lead_seconds) {
+      continue;
+    }
+
+    const y = hitY - (timeUntilHit / lead_seconds) * (hitY - topY);
+    const pitchRatio = clamp((sample.midi - violin_min_midi) / (violin_max_midi - violin_min_midi), 0, 1);
+    const x = paddingX + pitchRatio * laneWidth;
+    const alpha = clamp(1 - Math.abs(timeUntilHit) / lead_seconds, 0.2, 0.9);
+
+    ctx.fillStyle = `rgba(143, 255, 186, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   if (activePitchMidi !== null) {

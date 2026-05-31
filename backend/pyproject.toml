@@ -5,8 +5,15 @@ description = "FastAPI OMR backend for Violin Hero"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111.0",
+    "nvidia-cublas-cu12>=12.9.2.10",
+    "nvidia-cuda-runtime-cu12>=12.9.79",
+    "nvidia-cudnn-cu12>=9.23.0.39",
+    "nvidia-cufft-cu12>=11.4.1.4",
+    "onnxruntime-gpu>=1.26.0",
     "pillow>=12.2.0",
+    "pypdfium2>=5.8.0",
     "python-multipart>=0.0.9",
+    "rapidocr>=3.8.1",
     "uvicorn[standard]>=0.30.0",
 ]
 

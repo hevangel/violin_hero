@@ -5,7 +5,7 @@ export type DemoPlayer = {
   stop: () => void;
 };
 
-export function startDemoPlayback(notes: ScoreNote[], startDelaySec: number, offsetSec = 0): DemoPlayer {
+export function startDemoPlayback(notes: ScoreNote[], startDelaySec: number, offsetSec = 0, tempoScale = 1): DemoPlayer {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
     throw new Error("This browser does not support Web Audio demo playback.");
@@ -40,6 +40,7 @@ export function startDemoPlayback(notes: ScoreNote[], startDelaySec: number, off
   const oscillators: OscillatorNode[] = [];
   const lfos: OscillatorNode[] = [];
   const startAt = audioContext.currentTime + startDelaySec;
+  const safeTempoScale = Math.max(0.25, tempoScale);
 
   for (const note of notes) {
     const durationSec = Math.max(note.durationSec, 0.08);
@@ -54,8 +55,8 @@ export function startDemoPlayback(notes: ScoreNote[], startDelaySec: number, off
     const vibratoDepth = audioContext.createGain();
     const subGain = audioContext.createGain();
     const noteGain = audioContext.createGain();
-    const relativeStartSec = Math.max(0, note.startSec - offsetSec);
-    const remainingDurationSec = noteEndSec - Math.max(note.startSec, offsetSec);
+    const relativeStartSec = Math.max(0, note.startSec - offsetSec) / safeTempoScale;
+    const remainingDurationSec = (noteEndSec - Math.max(note.startSec, offsetSec)) / safeTempoScale;
     const noteStart = startAt + relativeStartSec;
     const noteEnd = noteStart + remainingDurationSec;
 

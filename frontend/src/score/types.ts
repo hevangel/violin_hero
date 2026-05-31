@@ -7,6 +7,7 @@ export type ScoreNote = {
   durationSec: number;
   velocity?: number;
   partName?: string;
+  cursorStep?: number;
 };
 
 export type ParsedScore = {
@@ -14,7 +15,15 @@ export type ParsedScore = {
   notes: ScoreNote[];
   sourceKind: UploadKind;
   sourceBlob?: Blob;
+  extractionBlob?: Blob;
+  omrHints?: OmrHints;
   warnings: string[];
+};
+
+export type OmrHints = {
+  title?: string;
+  violinPartAliases?: string[];
+  recognizedText?: string[];
 };
 
 export type ScoreIngestResult = {

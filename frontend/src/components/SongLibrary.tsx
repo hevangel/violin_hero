@@ -6,6 +6,7 @@ type SongLibraryProps = {
   uploadedSongs: UploadedSong[];
   onSelectBuiltIn: (song: BuiltInSong) => void;
   onSelectUploaded: (song: UploadedSong) => void;
+  onViewUploaded: (song: UploadedSong) => void;
   onDeleteUploaded: (song: UploadedSong) => void;
 };
 
@@ -13,6 +14,7 @@ export function SongLibrary({
   uploadedSongs,
   onSelectBuiltIn,
   onSelectUploaded,
+  onViewUploaded,
   onDeleteUploaded,
 }: SongLibraryProps) {
   const [activeTab, setActiveTab] = useState<"built-in" | "uploaded">("built-in");
@@ -67,9 +69,31 @@ export function SongLibrary({
                       {song.notes.length} notes • {song.originalFileName}
                     </small>
                   </button>
-                  <button type="button" className="icon-button" onClick={() => onDeleteUploaded(song)}>
-                    Remove
-                  </button>
+                  <div className="uploaded-song-actions">
+                    <button
+                      type="button"
+                      className="icon-button"
+                      onClick={() => onViewUploaded(song)}
+                      aria-label={`View ${song.title}`}
+                      title={`View ${song.title}`}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M12 5c5 0 8.5 4.1 9.7 6.2a1.6 1.6 0 0 1 0 1.6C20.5 14.9 17 19 12 19s-8.5-4.1-9.7-6.2a1.6 1.6 0 0 1 0-1.6C3.5 9.1 7 5 12 5Zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      className="icon-button danger"
+                      onClick={() => onDeleteUploaded(song)}
+                      aria-label={`Delete ${song.title}`}
+                      title={`Delete ${song.title}`}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path d="M9 3h6l1 2h4v2H4V5h4l1-2Z" />
+                        <path d="M6 9h12l-1 12H7L6 9Zm4 2v8h2v-8h-2Zm4 0v8h2v-8h-2Z" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))
             )}

@@ -7,6 +7,7 @@ from fastapi.background import BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
+from app.ocr_hints import encode_hints_header
 from app.omr import OmrError, convert_upload_with_audiveris
 
 app = FastAPI(title="Violin Hero OMR API")
@@ -17,6 +18,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Violin-Hero-Omr-Hints"],
 )
 
 
@@ -38,6 +40,7 @@ async def convert_score(file: UploadFile, background_tasks: BackgroundTasks) -> 
         converted.path,
         media_type=media_type,
         filename=converted.path.name,
+        headers=omr_headers(converted.hints),
         background=background_tasks,
     )
 
@@ -46,3 +49,10 @@ def media_type_for(path: Path) -> str:
     if path.suffix.lower() == ".mxl":
         return "application/vnd.recordare.musicxml"
     return "application/vnd.recordare.musicxml+xml"
+
+
+def omr_headers(hints: dict[str, object]) -> dict[str, str]:
+    if not hints:
+        return {}
+
+    return {"X-Violin-Hero-Omr-Hints": encode_hints_header(hints)}

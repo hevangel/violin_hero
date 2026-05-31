@@ -1,6 +1,6 @@
 import { parseMidiFile } from "./midi";
 import { parseMusicXml, readMusicXmlFile } from "./musicxml";
-import type { ScoreIngestResult } from "./types";
+import type { OmrHints, ScoreIngestResult } from "./types";
 
 const omr_extensions = [".pdf", ".png", ".jpg", ".jpeg", ".webp"];
 const musicxml_extensions = [".musicxml", ".xml", ".mxl"];
@@ -27,14 +27,24 @@ export async function ingestScoreFile(file: File): Promise<ScoreIngestResult> {
     const { xmlText, kind } = await readMusicXmlFile(converted.blob);
     return {
       convertedFileName: converted.fileName,
-      parsedScore: parseMusicXml(xmlText, kind, converted.blob),
+      parsedScore: parseMusicXml(xmlText, kind, converted.blob, converted.hints),
     };
   }
 
   throw new Error("Unsupported score file. Upload MusicXML, MXL, MIDI, PDF, PNG, JPG, or WebP.");
 }
 
-async function convertWithOmr(file: File): Promise<{ blob: Blob; fileName: string }> {
+export async function reprocessOmrFile(fileName: string, blob: Blob): Promise<ScoreIngestResult> {
+  const file = new File([blob], fileName, { type: blob.type });
+  const converted = await convertWithOmr(file);
+  const { xmlText, kind } = await readMusicXmlFile(converted.blob);
+  return {
+    convertedFileName: converted.fileName,
+    parsedScore: parseMusicXml(xmlText, kind, converted.blob, converted.hints),
+  };
+}
+
+async function convertWithOmr(file: File): Promise<{ blob: Blob; fileName: string; hints?: OmrHints }> {
   const formData = new FormData();
   formData.append("file", file);
 
@@ -53,6 +63,7 @@ async function convertWithOmr(file: File): Promise<{ blob: Blob; fileName: strin
   return {
     blob,
     fileName: readFilename(disposition) ?? "converted-score.mxl",
+    hints: readOmrHints(response.headers.get("x-violin-hero-omr-hints")),
   };
 }
 
@@ -73,4 +84,29 @@ function readFilename(disposition: string | null): string | null {
 function fileExtension(fileName: string): string {
   const dotIndex = fileName.lastIndexOf(".");
   return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : "";
+}
+
+function readOmrHints(header: string | null): OmrHints | undefined {
+  if (!header) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(header));
+    if (!parsed || typeof parsed !== "object") {
+      return undefined;
+    }
+
+    return {
+      title: typeof parsed.title === "string" ? parsed.title : undefined,
+      violinPartAliases: Array.isArray(parsed.violinPartAliases)
+        ? parsed.violinPartAliases.filter((alias: unknown): alias is string => typeof alias === "string")
+        : undefined,
+      recognizedText: Array.isArray(parsed.recognizedText)
+        ? parsed.recognizedText.filter((text: unknown): text is string => typeof text === "string")
+        : undefined,
+    };
+  } catch {
+    return undefined;
+  }
 }

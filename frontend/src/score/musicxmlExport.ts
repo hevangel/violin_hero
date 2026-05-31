@@ -1,11 +1,19 @@
 import type { ScoreNote } from "./types";
 
 const divisions = 4;
+const beats_per_measure = 4;
+const measure_units = divisions * beats_per_measure;
 
 type MusicXmlEvent = {
   pitchMidi: number | null;
   durationUnits: number;
   chord: boolean;
+  noteId?: string;
+};
+
+export type GeneratedMusicXmlPreview = {
+  blob: Blob;
+  cursorStepsByNoteId: Map<string, number>;
 };
 
 export function scoreNotesToMusicXmlBlob(title: string, notes: ScoreNote[], tempoBpm = 96): Blob {
@@ -14,11 +22,30 @@ export function scoreNotesToMusicXmlBlob(title: string, notes: ScoreNote[], temp
   });
 }
 
-export function scoreNotesToMusicXml(title: string, notes: ScoreNote[], tempoBpm = 96): string {
-  const events = notesToEvents(notes, tempoBpm);
-  const noteXml = events.map(eventToXml).join("\n");
+export function scoreNotesToMusicXmlPreview(title: string, notes: ScoreNote[], tempoBpm = 96): GeneratedMusicXmlPreview {
+  const { xmlText, cursorStepsByNoteId } = scoreNotesToMusicXmlWithCursorSteps(title, notes, tempoBpm);
+  return {
+    blob: new Blob([xmlText], { type: "application/vnd.recordare.musicxml+xml" }),
+    cursorStepsByNoteId,
+  };
+}
 
-  return `<?xml version="1.0" encoding="UTF-8"?>
+export function scoreNotesToMusicXml(title: string, notes: ScoreNote[], tempoBpm = 96): string {
+  return scoreNotesToMusicXmlWithCursorSteps(title, notes, tempoBpm).xmlText;
+}
+
+function scoreNotesToMusicXmlWithCursorSteps(
+  title: string,
+  notes: ScoreNote[],
+  tempoBpm = 96,
+): { xmlText: string; cursorStepsByNoteId: Map<string, number> } {
+  const events = notesToEvents(notes, tempoBpm);
+  const cursorStepsByNoteId = cursorStepsFromEvents(events);
+  const measureXml = eventsToMeasures(events)
+    .map((eventsInMeasure, index) => measureToXml(eventsInMeasure, index, tempoBpm))
+    .join("\n");
+
+  const xmlText = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
 <score-partwise version="4.0">
   <movement-title>${escapeXml(title)}</movement-title>
@@ -28,7 +55,17 @@ export function scoreNotesToMusicXml(title: string, notes: ScoreNote[], tempoBpm
     </score-part>
   </part-list>
   <part id="P1">
-    <measure number="1">
+${measureXml}
+  </part>
+</score-partwise>`;
+
+  return { xmlText, cursorStepsByNoteId };
+}
+
+function measureToXml(events: MusicXmlEvent[], index: number, tempoBpm: number): string {
+  const attributes =
+    index === 0
+      ? `
       <attributes>
         <divisions>${divisions}</divisions>
         <key>
@@ -42,7 +79,11 @@ export function scoreNotesToMusicXml(title: string, notes: ScoreNote[], tempoBpm
           <sign>G</sign>
           <line>2</line>
         </clef>
-      </attributes>
+      </attributes>`
+      : "";
+  const direction =
+    index === 0
+      ? `
       <direction placement="above">
         <direction-type>
           <metronome>
@@ -52,10 +93,11 @@ export function scoreNotesToMusicXml(title: string, notes: ScoreNote[], tempoBpm
         </direction-type>
         <sound tempo="${Math.round(tempoBpm)}"/>
       </direction>
-${noteXml}
-    </measure>
-  </part>
-</score-partwise>`;
+`
+      : "";
+  const noteXml = events.map(eventToXml).join("\n");
+  return `    <measure number="${index + 1}">${attributes}${direction}${noteXml}
+    </measure>`;
 }
 
 function notesToEvents(notes: ScoreNote[], tempoBpm: number): MusicXmlEvent[] {
@@ -83,6 +125,7 @@ function notesToEvents(notes: ScoreNote[], tempoBpm: number): MusicXmlEvent[] {
 
     const noteEvents = group
       .map((note) => ({
+        noteId: note.id,
         pitchMidi: Math.round(note.pitchMidi),
         durationUnits: Math.max(1, Math.round((note.durationSec / secondsPerBeat) * divisions)),
       }))
@@ -99,6 +142,53 @@ function notesToEvents(notes: ScoreNote[], tempoBpm: number): MusicXmlEvent[] {
   }
 
   return events;
+}
+
+function cursorStepsFromEvents(events: MusicXmlEvent[]): Map<string, number> {
+  const cursorStepsByNoteId = new Map<string, number>();
+  let cursorStep = 0;
+
+  for (const event of events) {
+    if (event.noteId && !cursorStepsByNoteId.has(event.noteId)) {
+      cursorStepsByNoteId.set(event.noteId, cursorStep);
+    }
+
+    if (!event.chord) {
+      cursorStep += 1;
+    }
+  }
+
+  return cursorStepsByNoteId;
+}
+
+function eventsToMeasures(events: MusicXmlEvent[]): MusicXmlEvent[][] {
+  const measures: MusicXmlEvent[][] = [[]];
+  let measureCursor = 0;
+
+  for (const event of events) {
+    if (event.chord) {
+      measures[measures.length - 1].push(event);
+      continue;
+    }
+
+    let remainingUnits = event.durationUnits;
+    while (remainingUnits > 0) {
+      if (measureCursor === measure_units) {
+        measures.push([]);
+        measureCursor = 0;
+      }
+
+      const chunkUnits = Math.min(remainingUnits, measure_units - measureCursor);
+      measures[measures.length - 1].push({
+        ...event,
+        durationUnits: chunkUnits,
+      });
+      remainingUnits -= chunkUnits;
+      measureCursor += chunkUnits;
+    }
+  }
+
+  return measures;
 }
 
 function eventToXml(event: MusicXmlEvent): string {
