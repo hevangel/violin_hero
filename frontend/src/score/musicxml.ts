@@ -48,8 +48,10 @@ export function parseMusicXml(xmlText: string, sourceKind: UploadKind, sourceBlo
     textContent(doc.querySelector("movement-title")) ??
     textContent(doc.querySelector("work-title")) ??
     "Uploaded violin score";
-  const parts = Array.from(doc.querySelectorAll("part"));
+  const allParts = Array.from(doc.querySelectorAll("part"));
   const partNames = readPartNames(doc);
+  const violinParts = allParts.filter((part) => isViolinPart(part, partNames));
+  const parts = violinParts.length > 0 ? violinParts : allParts;
   const notes: ScoreNote[] = [];
   const warnings: string[] = [];
 
@@ -102,8 +104,10 @@ export function parseMusicXml(xmlText: string, sourceKind: UploadKind, sourceBlo
     }
   }
 
-  if (parts.length > 1) {
-    warnings.push("Multiple parts were found; all detected pitched notes are included in the game timeline.");
+  if (violinParts.length > 0 && allParts.length > violinParts.length) {
+    warnings.push("Multiple parts were found; only the violin part is used for gameplay.");
+  } else if (allParts.length > 1) {
+    warnings.push("Multiple parts were found, but no part was labeled violin; all pitched notes are included.");
   }
 
   return {
@@ -113,6 +117,12 @@ export function parseMusicXml(xmlText: string, sourceKind: UploadKind, sourceBlo
     sourceBlob,
     warnings,
   };
+}
+
+function isViolinPart(part: Element, partNames: Map<string, string>): boolean {
+  const partId = part.getAttribute("id") ?? "";
+  const partName = partNames.get(partId) ?? "";
+  return /\b(vln|violin|violino|violon)\b/i.test(`${partId} ${partName}`);
 }
 
 function readPitchMidi(note: Element): number | null {

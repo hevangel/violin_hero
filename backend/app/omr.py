@@ -8,9 +8,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import UploadFile
+from PIL import Image
 
 allowed_omr_extensions = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
+raster_omr_extensions = {".png", ".jpg", ".jpeg", ".webp"}
 export_extensions = {".mxl", ".musicxml", ".xml"}
+target_raster_max_dimension = 3600
 
 
 class OmrError(RuntimeError):
@@ -48,7 +51,8 @@ async def convert_upload_with_audiveris(upload: UploadFile) -> ConvertedScore:
             while chunk := await upload.read(1024 * 1024):
                 destination.write(chunk)
 
-        run_audiveris(input_path, output_dir)
+        prepared_path = prepare_input_for_omr(input_path, suffix)
+        run_audiveris(prepared_path, output_dir)
         exported = find_exported_score(output_dir)
         return ConvertedScore(path=exported, temp_dir=temp_dir)
     except Exception:
@@ -80,9 +84,27 @@ def run_audiveris(input_path: Path, output_dir: Path) -> None:
         raise OmrError("Audiveris timed out while converting the score.") from exc
 
     if result.returncode != 0:
-        output = (result.stderr or result.stdout or "").strip()
-        detail = f" Audiveris output: {output[:1000]}" if output else ""
+        output = "\n".join(part for part in [result.stdout, result.stderr] if part).strip()
+        detail = f" Audiveris output: {summarize_process_output(output)}" if output else ""
         raise OmrError(f"Audiveris could not convert this score.{detail}")
+
+
+def prepare_input_for_omr(input_path: Path, suffix: str) -> Path:
+    if suffix not in raster_omr_extensions:
+        return input_path
+
+    try:
+        with Image.open(input_path) as image:
+            width, height = image.size
+            scale = max(1, min(4, -(-target_raster_max_dimension // max(width, height))))
+            prepared_path = input_path.with_name("score-prepared.png")
+            prepared_image = image.convert("RGB")
+            if scale > 1:
+                prepared_image = prepared_image.resize((width * scale, height * scale), Image.Resampling.LANCZOS)
+            prepared_image.save(prepared_path)
+            return prepared_path
+    except OSError as exc:
+        raise OmrError("The uploaded image could not be opened for OMR preprocessing.") from exc
 
 
 def find_exported_score(output_dir: Path) -> Path:
@@ -96,4 +118,12 @@ def find_exported_score(output_dir: Path) -> Path:
 
     candidates.sort(key=lambda path: (path.suffix.lower() != ".mxl", -path.stat().st_size, path.name))
     return candidates[0]
+
+
+def summarize_process_output(output: str, limit: int = 1800) -> str:
+    if len(output) <= limit:
+        return output
+
+    half = limit // 2
+    return f"{output[:half]}\n...\n{output[-half:]}"
 

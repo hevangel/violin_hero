@@ -44,4 +44,39 @@ describe("parseMusicXml", () => {
     expect(score.notes[0]).toMatchObject({ pitchMidi: 69, startSec: 0, durationSec: 0.5 });
     expect(score.notes[1]).toMatchObject({ pitchMidi: 70, startSec: 1, durationSec: 1 });
   });
+
+  it("keeps only violin parts when a score has multiple labeled parts", () => {
+    const score = parseMusicXml(
+      `<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list>
+    <score-part id="P1"><part-name>Piano</part-name></score-part>
+    <score-part id="P2"><part-name>Violin I</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions></attributes>
+      <note>
+        <pitch><step>C</step><octave>4</octave></pitch>
+        <duration>1</duration>
+      </note>
+    </measure>
+  </part>
+  <part id="P2">
+    <measure number="1">
+      <attributes><divisions>1</divisions></attributes>
+      <note>
+        <pitch><step>A</step><octave>4</octave></pitch>
+        <duration>1</duration>
+      </note>
+    </measure>
+  </part>
+</score-partwise>`,
+      "musicxml",
+    );
+
+    expect(score.notes).toHaveLength(1);
+    expect(score.notes[0]).toMatchObject({ pitchMidi: 69, partName: "Violin I" });
+    expect(score.warnings[0]).toContain("only the violin part");
+  });
 });

@@ -4,10 +4,20 @@ Violin Hero is a browser-based rhythm trainer inspired by Guitar Hero. Upload a 
 
 This README is for humans who want to run, test, or review the project. AI agents should read `AGENTS.md` before making changes.
 
+![Violin Hero homepage](docs/violin-hero-home.png)
+
 ## What Works
 
 - MusicXML, MXL, and MIDI uploads.
+- Uploaded scores are saved in the browser and can be replayed from the Uploaded songs tab.
 - PDF/image uploads through a local FastAPI backend that calls Audiveris OMR.
+- Low-resolution raster uploads are upscaled before OMR so screenshots have a better chance of converting.
+- Built-in Suzuki Level 1 practice songs using public-domain beginner melodies and original practice patterns.
+- Built-in songs are generated with General MIDI violin data for consistent playback.
+- Notation preview for MusicXML/MXL, OMR results, MIDI uploads, and built-in songs.
+- Demo mode that plays the loaded score with synthesized violin-like tones.
+- Practice and demo playback support pause, resume, and stop controls.
+- Current-note highlighting with automatic notation preview scrolling during playback.
 - Canvas note highway with violin pitch range from G3 through high treble notes.
 - Browser microphone pitch detection with a YIN-style detector.
 - Pitch/rhythm scoring with combo, judgement, timing, and live detected pitch.
@@ -44,6 +54,8 @@ uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Open `http://127.0.0.1:5173`.
+
+The screenshot above was captured from the local app at `http://127.0.0.1:5173` with the backend health endpoint responding at `http://127.0.0.1:8000/api/health`.
 
 ## Tests
 

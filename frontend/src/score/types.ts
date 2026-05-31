@@ -1,4 +1,4 @@
-export type UploadKind = "musicxml" | "mxl" | "midi" | "omr";
+export type UploadKind = "musicxml" | "mxl" | "midi" | "omr" | "builtin";
 
 export type ScoreNote = {
   id: string;

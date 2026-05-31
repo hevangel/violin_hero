@@ -5,6 +5,7 @@ description = "FastAPI OMR backend for Violin Hero"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.111.0",
+    "pillow>=12.2.0",
     "python-multipart>=0.0.9",
     "uvicorn[standard]>=0.30.0",
 ]

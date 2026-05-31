@@ -1,5 +1,6 @@
 import { Midi } from "@tonejs/midi";
 import type { ParsedScore, ScoreNote } from "./types";
+import { scoreNotesToMusicXmlBlob } from "./musicxmlExport";
 
 export async function parseMidiFile(file: File): Promise<ParsedScore> {
   const midi = new Midi(await file.arrayBuffer());
@@ -18,10 +19,15 @@ export async function parseMidiFile(file: File): Promise<ParsedScore> {
     }
   }
 
+  const title = midi.name || file.name.replace(/\.(mid|midi)$/i, "") || "Uploaded MIDI score";
+  const sortedNotes = notes.sort((a, b) => a.startSec - b.startSec || a.pitchMidi - b.pitchMidi);
+  const tempoBpm = midi.header.tempos[0]?.bpm ?? 96;
+
   return {
-    title: midi.name || file.name.replace(/\.(mid|midi)$/i, "") || "Uploaded MIDI score",
-    notes: notes.sort((a, b) => a.startSec - b.startSec || a.pitchMidi - b.pitchMidi),
+    title,
+    notes: sortedNotes,
     sourceKind: "midi",
+    sourceBlob: scoreNotesToMusicXmlBlob(title, sortedNotes, tempoBpm),
     warnings: midi.tracks.length > 1 ? ["Multiple MIDI tracks were found; all notes are included."] : [],
   };
 }
